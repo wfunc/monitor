@@ -63,7 +63,7 @@ curl -fsSL https://raw.githubusercontent.com/wfunc/monitor/main/scripts/get-moni
 
 - 脚本会自动：
   - 获取最新 Release 版本（或通过 `MONITOR_VERSION=0.1.1` 指定）
-  - 下载对应架构的打包产物
+  - 下载对应架构的打包产物（若 GitHub 无法访问，可设置 `MONITOR_RELEASE_BASE` 指向镜像，或 `MONITOR_TARBALL=/path/to/monitor.tar.gz` 使用本地包）
   - 运行包内的 `install.sh` 完成部署，但在启动服务前会提示你输入 `MONITOR_WEBHOOK_URL`
   - 可选择立即启动/重启 `monitor.service` 或稍后手动执行
 

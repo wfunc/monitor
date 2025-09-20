@@ -104,6 +104,35 @@ maybe_start_service() {
   fi
 }
 
+resolve_tarball() {
+  local version="$1"
+  local arch="$2"
+  local tmpdir="$3"
+
+  if [[ -n "${MONITOR_TARBALL:-}" ]]; then
+    echo "[monitor-bootstrap] using local tarball ${MONITOR_TARBALL}" >&2
+    cp "${MONITOR_TARBALL}" "$tmpdir/monitor.tar.gz"
+    return
+  fi
+
+  local base="${MONITOR_RELEASE_BASE:-https://github.com/wfunc/monitor/releases/download}"
+  local url="${base%/}/v${version}/monitor-${version}-linux-${arch}.tar.gz"
+  local attempts=${MONITOR_DOWNLOAD_ATTEMPTS:-3}
+  local delay=${MONITOR_DOWNLOAD_RETRY_DELAY:-3}
+
+  for ((i=1; i<=attempts; i++)); do
+    echo "[monitor-bootstrap] downloading ${url} (attempt ${i}/${attempts})" >&2
+    if curl -fsSL "$url" -o "$tmpdir/monitor.tar.gz"; then
+      return
+    fi
+    echo "[monitor-bootstrap] download failed" >&2
+    sleep "$delay"
+  done
+
+  echo "[monitor-bootstrap] failed to download release tarball; set MONITOR_TARBALL to a local file or MONITOR_RELEASE_BASE to a mirror" >&2
+  exit 1
+}
+
 main() {
   require_root
   require_command curl
@@ -119,13 +148,11 @@ main() {
   local arch
   arch=$(detect_arch)
 
-  local url="https://github.com/wfunc/monitor/releases/download/v${version}/monitor-${version}-linux-${arch}.tar.gz"
   local tmpdir
   tmpdir=$(mktemp -d)
   trap 'rm -rf "${tmpdir:-}"' EXIT
 
-  echo "[monitor-bootstrap] downloading ${url}" >&2
-  curl -fsSL "$url" -o "$tmpdir/monitor.tar.gz"
+  resolve_tarball "$version" "$arch" "$tmpdir"
 
   tar -xzf "$tmpdir/monitor.tar.gz" -C "$tmpdir"
   local package_dir
