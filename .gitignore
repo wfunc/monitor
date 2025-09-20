@@ -1,0 +1,9 @@
+# Build artifacts
+monitor
+dist/
+*.tar.gz
+
+# Editor metadata
+.DS_Store
+.idea/
+.vscode/

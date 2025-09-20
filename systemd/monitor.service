@@ -1,0 +1,30 @@
+[Unit]
+Description=System Resource Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=monitor
+Group=monitor
+WorkingDirectory=/opt/wfunc-monitor
+EnvironmentFile=-/etc/default/monitor
+ExecStart=/usr/local/bin/monitor \
+  --cpu=${MONITOR_CPU_THRESHOLD} \
+  --mem=${MONITOR_MEM_THRESHOLD} \
+  --disk=${MONITOR_DISK_THRESHOLD} \
+  --disk-path=${MONITOR_DISK_PATH} \
+  --io-wait=${MONITOR_IOWAIT_THRESHOLD} \
+  --interval=${MONITOR_INTERVAL} \
+  --webhook-url=${MONITOR_WEBHOOK_URL} \
+  --service-name=${MONITOR_SERVICE_NAME} \
+  --alert-type=${MONITOR_ALERT_TYPE} \
+  --alert-status=${MONITOR_ALERT_STATUS} \
+  --account-id=${MONITOR_ACCOUNT_ID} \
+  --account-name=${MONITOR_ACCOUNT_NAME} \
+  --platform=${MONITOR_PLATFORM}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
