@@ -61,10 +61,11 @@ go run . \
 curl -fsSL https://raw.githubusercontent.com/wfunc/monitor/main/scripts/get-monitor.sh | sudo bash
 ```
 
-脚本会自动：
-- 获取最新 Release 版本（或通过 `MONITOR_VERSION=0.1.1` 指定）
-- 下载对应架构的打包产物
-- 运行包内的 `install.sh` 完成部署
+- 脚本会自动：
+  - 获取最新 Release 版本（或通过 `MONITOR_VERSION=0.1.1` 指定）
+  - 下载对应架构的打包产物
+  - 运行包内的 `install.sh` 完成部署，但在启动服务前会提示你输入 `MONITOR_WEBHOOK_URL`
+  - 可选择立即启动/重启 `monitor.service` 或稍后手动执行
 
 若需要直接从源码安装，也可继续使用：
 
