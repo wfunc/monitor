@@ -68,7 +68,7 @@ main() {
   local url="https://github.com/wfunc/monitor/releases/download/v${version}/monitor-${version}-linux-${arch}.tar.gz"
   local tmpdir
   tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
+  trap 'rm -rf "${tmpdir:-}"' EXIT
 
   echo "[monitor-bootstrap] downloading ${url}" >&2
   curl -fsSL "$url" -o "$tmpdir/monitor.tar.gz"
