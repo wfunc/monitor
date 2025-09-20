@@ -74,19 +74,19 @@ main() {
   curl -fsSL "$url" -o "$tmpdir/monitor.tar.gz"
 
   tar -xzf "$tmpdir/monitor.tar.gz" -C "$tmpdir"
-  local install_script
-  if [[ -f "$tmpdir/install.sh" ]]; then
-    install_script="$tmpdir/install.sh"
-  else
-    install_script=$(find "$tmpdir" -maxdepth 2 -type f -name 'install.sh' -print -quit)
-  fi
-  if [[ -z "$install_script" ]]; then
-    echo "[monitor-bootstrap] failed to locate install.sh inside package" >&2
-    exit 1
+  local package_dir
+  package_dir=$(find "$tmpdir" -maxdepth 1 -type d -name 'monitor-*' -print -quit)
+  if [[ -z "$package_dir" ]]; then
+    package_dir="$tmpdir"
   fi
 
+  local install_script="$tmpdir/install.sh"
+  echo "[monitor-bootstrap] downloading latest install script" >&2
+  curl -fsSL "https://raw.githubusercontent.com/wfunc/monitor/main/install.sh" -o "$install_script"
+  chmod +x "$install_script"
+
   echo "[monitor-bootstrap] running install.sh" >&2
-  bash "$install_script"
+  USE_LOCAL_PACKAGE=1 LOCAL_PACKAGE_DIR="$package_dir" bash "$install_script"
 }
 
 main "$@"

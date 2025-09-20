@@ -12,8 +12,8 @@ MONITOR_USER="${MONITOR_USER:-monitor}"
 ENABLE_SERVICE="${ENABLE_SERVICE:-1}"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-LOCAL_PACKAGE_DIR=""
-if [[ "${USE_LOCAL_PACKAGE:-1}" != "0" && -f "${SCRIPT_DIR}/monitor" ]]; then
+LOCAL_PACKAGE_DIR="${LOCAL_PACKAGE_DIR:-}"
+if [[ -z "${LOCAL_PACKAGE_DIR}" && "${USE_LOCAL_PACKAGE:-1}" != "0" && -f "${SCRIPT_DIR}/monitor" ]]; then
   LOCAL_PACKAGE_DIR="${SCRIPT_DIR}"
 fi
 
@@ -121,7 +121,7 @@ build_binary() {
   else
     log "building monitor binary"
     pushd "${INSTALL_DIR}" >/dev/null
-    go build -o "${BIN_PATH}"
+    go build -buildvcs=false -o "${BIN_PATH}"
     popd >/dev/null
   fi
   chmod 0755 "${BIN_PATH}"
