@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,6 +48,13 @@ type metricsSnapshot struct {
 	diskPercent   float64
 	diskPath      string
 	ioWaitPercent float64
+}
+
+type alertRecord struct {
+	Resource  string
+	Actual    float64
+	Threshold float64
+	Reason    string
 }
 
 func main() {
@@ -229,24 +237,40 @@ func report(ctx context.Context, snapshot metricsSnapshot, cfg *thresholdConfig)
 	fmt.Printf("[%s] CPU: %5.1f%% | MEM: %5.1f%% | DISK(%s): %5.1f%% | IOWAIT: %5.1f%%\n",
 		timestamp, snapshot.cpuPercent, snapshot.memPercent, snapshot.diskPath, snapshot.diskPercent, snapshot.ioWaitPercent)
 
+	var alerts []alertRecord
 	if snapshot.cpuPercent > cfg.cpuUsage {
-		triggerAlert(ctx, cfg, "CPU", snapshot.cpuPercent, cfg.cpuUsage)
+		alerts = append(alerts, buildAlertRecord("CPU", snapshot.cpuPercent, cfg.cpuUsage))
 	}
 	if snapshot.memPercent > cfg.memUsage {
-		triggerAlert(ctx, cfg, "Memory", snapshot.memPercent, cfg.memUsage)
+		alerts = append(alerts, buildAlertRecord("Memory", snapshot.memPercent, cfg.memUsage))
 	}
 	if snapshot.diskPercent > cfg.diskUsage {
-		triggerAlert(ctx, cfg, fmt.Sprintf("Disk %s", snapshot.diskPath), snapshot.diskPercent, cfg.diskUsage)
+		alerts = append(alerts, buildAlertRecord(fmt.Sprintf("Disk %s", snapshot.diskPath), snapshot.diskPercent, cfg.diskUsage))
 	}
 	if cfg.ioWaitUsage > 0 && snapshot.ioWaitPercent > cfg.ioWaitUsage {
-		triggerAlert(ctx, cfg, "IO Wait", snapshot.ioWaitPercent, cfg.ioWaitUsage)
+		alerts = append(alerts, buildAlertRecord("IO Wait", snapshot.ioWaitPercent, cfg.ioWaitUsage))
+	}
+
+	if len(alerts) > 0 {
+		printAlerts(alerts)
+		sendAlertBatch(ctx, cfg, alerts)
 	}
 }
 
-func triggerAlert(ctx context.Context, cfg *thresholdConfig, resource string, actual, threshold float64) {
-	reason := fmt.Sprintf("%s usage %.1f%% exceeds threshold %.1f%%", resource, actual, threshold)
-	fmt.Printf("ALERT: %s\n", reason)
-	sendWebhook(ctx, cfg, resource, actual, threshold, reason)
+func buildAlertRecord(resource string, actual, threshold float64) alertRecord {
+	return alertRecord{
+		Resource:  resource,
+		Actual:    round(actual, 1),
+		Threshold: round(threshold, 1),
+		Reason:    fmt.Sprintf("%s usage %.1f%% exceeds threshold %.1f%%", resource, actual, threshold),
+	}
+}
+
+func printAlerts(alerts []alertRecord) {
+	fmt.Println("ALERTS:")
+	for _, alert := range alerts {
+		fmt.Printf("  - %s\n", alert.Reason)
+	}
 }
 
 func round(value float64, precision int) float64 {
@@ -254,21 +278,32 @@ func round(value float64, precision int) float64 {
 	return math.Round(value*factor) / factor
 }
 
-func sendWebhook(ctx context.Context, cfg *thresholdConfig, resource string, actual, threshold float64, reason string) {
+func sendAlertBatch(ctx context.Context, cfg *thresholdConfig, alerts []alertRecord) {
 	if cfg.webhookURL == "" || cfg.httpClient == nil {
 		return
 	}
 
 	timestamp := time.Now().Format(time.RFC3339)
+
+	alertItems := make([]map[string]any, 0, len(alerts))
+	reasons := make([]string, 0, len(alerts))
+	for _, alert := range alerts {
+		alertItems = append(alertItems, map[string]any{
+			"resource":  alert.Resource,
+			"actual":    round(alert.Actual, 2),
+			"threshold": round(alert.Threshold, 2),
+			"reason":    alert.Reason,
+		})
+		reasons = append(reasons, alert.Reason)
+	}
+
 	data := map[string]any{
-		"resource":  resource,
-		"actual":    round(actual, 2),
-		"threshold": round(threshold, 2),
+		"alerts":    alertItems,
 		"status":    cfg.alertStatus,
-		"reason":    reason,
 		"platform":  cfg.platform,
 		"host":      cfg.hostname,
 		"timestamp": timestamp,
+		"summary":   strings.Join(reasons, "; "),
 	}
 	if cfg.accountID != "" {
 		data["accountId"] = cfg.accountID
