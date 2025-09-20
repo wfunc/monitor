@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -30,12 +27,8 @@ jobs:
       - name: Determine version
         id: vars
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="${{ inputs.version }}"
-            VERSION="${VERSION#v}"
-          fi
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
           if [[ -z "${VERSION}" ]]; then
             echo "Version could not be determined" >&2
             exit 1

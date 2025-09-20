@@ -1,0 +1,130 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  auto-release:
+    if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Detect significant changes
+        id: changes
+        run: |
+          set -euo pipefail
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          else
+            CHANGED_FILES=$(git ls-files)
+          fi
+
+          echo "Changed files:\n$CHANGED_FILES"
+          SIGNIFICANT=false
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            if [[ "$file" =~ ^docs/ ]] || [[ "$file" =~ ^\.github/ ]]; then
+              continue
+            fi
+            if [[ "$file" == "LICENSE" ]] || [[ "$file" == ".gitignore" ]]; then
+              continue
+            fi
+            if [[ "$file" =~ \\.(md|txt)$ ]]; then
+              continue
+            fi
+            SIGNIFICANT=true
+            break
+          done <<<"$CHANGED_FILES"
+
+          echo "needs_release=$SIGNIFICANT" >>"$GITHUB_OUTPUT"
+
+      - name: Skip release
+        if: steps.changes.outputs.needs_release != 'true'
+        run: echo "No significant changes detected. Skipping release."
+
+      - name: Determine next version
+        if: steps.changes.outputs.needs_release == 'true'
+        id: version
+        run: |
+          set -euo pipefail
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          TAG_VERSION="${LATEST_TAG#v}"
+          FILE_VERSION=$(cat VERSION 2>/dev/null || echo "0.0.0")
+          [[ -z "$FILE_VERSION" ]] && FILE_VERSION="0.0.0"
+
+          compare_versions() {
+            printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1
+          }
+
+          CURRENT=$(compare_versions "$TAG_VERSION" "$FILE_VERSION")
+          IFS='.' read -r MAJOR MINOR PATCH <<<"$CURRENT"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+          echo "$NEW_VERSION" > VERSION
+          echo "version=$NEW_VERSION" >>"$GITHUB_OUTPUT"
+
+      - name: Commit VERSION bump
+        if: steps.changes.outputs.needs_release == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- VERSION; then
+            echo "VERSION unchanged; nothing to commit."
+          else
+            git add VERSION
+            git commit -m "chore: release v${{ steps.version.outputs.version }} [skip ci]"
+          fi
+
+      - name: Run tests
+        if: steps.changes.outputs.needs_release == 'true'
+        run: go test ./...
+
+      - name: Build release artifacts
+        if: steps.changes.outputs.needs_release == 'true'
+        run: ./scripts/package_release.sh ${{ steps.version.outputs.version }}
+
+      - name: Push changes and tags
+        if: steps.changes.outputs.needs_release == 'true'
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Upload artifacts
+        if: steps.changes.outputs.needs_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-${{ steps.version.outputs.version }}
+          path: dist/*
+
+      - name: Create GitHub release
+        if: steps.changes.outputs.needs_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: dist/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

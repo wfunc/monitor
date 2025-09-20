@@ -70,6 +70,23 @@ curl -fsSL https://raw.githubusercontent.com/wfunc/monitor/main/install.sh | sud
 
 ## Release 打包
 
+### 自动发布
+
+推送到 `main` 分支时，`.github/workflows/auto-release.yml` 会检查是否包含代码层面的改动；符合条件时自动：
+
+- bump `VERSION` （补丁号 +1，并带 `[skip ci]` 提交）
+- 运行 `go test ./...`
+- 调用 `scripts/package_release.sh` 构建两种架构的压缩包
+- 推送新的 tag（`vX.Y.Z`）并在 GitHub 上创建 Release，上传 `dist/` 产物
+
+若只修改文档或 `.github` 配置，流水线会自动跳过。
+
+### 手动触发
+
+如需指定版本号，可在 GitHub Actions 中手动运行 `Release` workflow，并输入目标版本号（不带前缀 `v`）。
+
+### 本地打包
+
 本地快速打包（输出到 `dist/`）：
 
 ```bash
@@ -80,11 +97,8 @@ curl -fsSL https://raw.githubusercontent.com/wfunc/monitor/main/install.sh | sud
 
 ### GitHub Actions
 
-`.github/workflows/release.yml` 会在：
-- 推送 `v*.*.*` 标签时自动运行
-- 或手动触发（需输入版本号）
-
-流程将运行 `go test`, 调用 `scripts/package_release.sh` 构建产物，并发布 GitHub Release。
+- `auto-release.yml`：自动检查 `main` 并发布新版本
+- `release.yml`：手动触发的发布流程
 
 ## 开发与测试
 
