@@ -11,6 +11,12 @@ ENV_FILE="${ENV_FILE:-/etc/default/monitor}"
 MONITOR_USER="${MONITOR_USER:-monitor}"
 ENABLE_SERVICE="${ENABLE_SERVICE:-1}"
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+LOCAL_PACKAGE_DIR=""
+if [[ "${USE_LOCAL_PACKAGE:-1}" != "0" && -f "${SCRIPT_DIR}/monitor" ]]; then
+  LOCAL_PACKAGE_DIR="${SCRIPT_DIR}"
+fi
+
 log() {
   echo "[monitor-install] $*"
 }
@@ -31,26 +37,48 @@ assert_command() {
 }
 
 install_dependencies() {
+  local packages=("$@")
+  ((${#packages[@]})) || return 0
   if command -v apt-get >/dev/null 2>&1; then
-    log "installing dependencies via apt-get"
+    log "installing dependencies via apt-get: ${packages[*]}"
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y git golang-go ca-certificates
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
   else
-    log "unsupported package manager; please install git and Go manually"
+    log "unsupported package manager; please install required packages manually: ${packages[*]}"
     exit 1
   fi
 }
 
 ensure_dependencies() {
+  local required_cmds=(systemctl)
+  if [[ -z "${LOCAL_PACKAGE_DIR}" ]]; then
+    required_cmds+=(git go)
+  fi
+
   local missing=()
-  for cmd in git go systemctl; do
+  for cmd in "${required_cmds[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
       missing+=("$cmd")
     fi
   done
-  if ((${#missing[@]})); then
-    install_dependencies
+
+  local packages=()
+  for cmd in "${missing[@]}"; do
+    case "$cmd" in
+      git) packages+=(git);;
+      go) packages+=(golang-go);;
+      systemctl)
+        log "systemctl command is required but not found"
+        ;;
+    esac
+  done
+  if ((${#packages[@]})); then
+    install_dependencies "${packages[@]}"
   fi
+
+  for cmd in "${required_cmds[@]}"; do
+    assert_command "$cmd"
+  done
 }
 
 setup_monitor_user() {
@@ -65,6 +93,12 @@ setup_monitor_user() {
 }
 
 sync_source() {
+  if [[ -n "${LOCAL_PACKAGE_DIR}" ]]; then
+    log "using prebuilt package from ${LOCAL_PACKAGE_DIR}"
+    install -d -o "${MONITOR_USER}" -g "${MONITOR_USER}" -m 0755 "${INSTALL_DIR}"
+    return
+  fi
+
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
     log "updating existing repository in ${INSTALL_DIR}"
     git -C "${INSTALL_DIR}" fetch --tags --force origin
@@ -80,21 +114,27 @@ sync_source() {
 }
 
 build_binary() {
-  log "building monitor binary"
   install -d "$(dirname "${BIN_PATH}")"
-  pushd "${INSTALL_DIR}" >/dev/null
-  go build -o "${BIN_PATH}"
-  popd >/dev/null
+  if [[ -n "${LOCAL_PACKAGE_DIR}" && -f "${LOCAL_PACKAGE_DIR}/monitor" ]]; then
+    log "installing prebuilt monitor binary"
+    install -m 0755 "${LOCAL_PACKAGE_DIR}/monitor" "${BIN_PATH}"
+  else
+    log "building monitor binary"
+    pushd "${INSTALL_DIR}" >/dev/null
+    go build -o "${BIN_PATH}"
+    popd >/dev/null
+  fi
   chmod 0755 "${BIN_PATH}"
   chown "root:root" "${BIN_PATH}"
 }
 
 install_unit_files() {
-  log "installing systemd unit to ${SERVICE_PATH}"
-  install -D -m 0644 "${INSTALL_DIR}/systemd/monitor.service" "${SERVICE_PATH}"
+  local source_dir="${LOCAL_PACKAGE_DIR:-${INSTALL_DIR}}"
+  log "installing systemd unit to ${SERVICE_PATH} from ${source_dir}"
+  install -D -m 0644 "${source_dir}/systemd/monitor.service" "${SERVICE_PATH}"
   if [[ ! -f "${ENV_FILE}" ]]; then
     log "installing default environment file to ${ENV_FILE}"
-    install -D -m 0644 "${INSTALL_DIR}/systemd/monitor.env.example" "${ENV_FILE}"
+    install -D -m 0644 "${source_dir}/systemd/monitor.env.example" "${ENV_FILE}"
   else
     log "preserving existing ${ENV_FILE}"
   fi
@@ -113,9 +153,6 @@ enable_service() {
 main() {
   require_root
   ensure_dependencies
-  assert_command git
-  assert_command go
-  assert_command systemctl
   setup_monitor_user
   if [[ "${INSTALL_DIR}" == "/" ]]; then
     log "INSTALL_DIR cannot be /"

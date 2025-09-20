@@ -58,10 +58,21 @@ go run . \
 服务器上执行（需 root 权限）：
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/wfunc/monitor/main/scripts/get-monitor.sh | sudo bash
+```
+
+脚本会自动：
+- 获取最新 Release 版本（或通过 `MONITOR_VERSION=0.1.1` 指定）
+- 下载对应架构的打包产物
+- 运行包内的 `install.sh` 完成部署
+
+若需要直接从源码安装，也可继续使用：
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/wfunc/monitor/main/install.sh | sudo bash
 ```
 
-安装流程：
+源码安装流程：
 - 自动安装 `git`、`golang-go`（若缺失）
 - 克隆仓库到 `/opt/wfunc-monitor`
 - 创建 `monitor` 系统用户
