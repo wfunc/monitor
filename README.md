@@ -8,6 +8,7 @@
 - 计算 CPU I/O wait 百分比，及时发现磁盘/IO 阻塞
 - 自定义阈值与采样间隔，可通过 CLI 或环境变量配置
 - 通过 Webhook 推送 JSON Payload，同时在控制台打印 `Webhook Payload: map[...]`
+- 同一轮采样触发的多个指标合并为一条 Webhook 告警，便于集中处理
 - 提供 systemd service 与安装脚本，便于长期运行
 - GitHub Actions 自动构建 Release 包（Linux AMD64/ARM64）
 
