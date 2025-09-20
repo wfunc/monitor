@@ -64,7 +64,8 @@ configure_webhook() {
   if [[ -n "$current" ]]; then
     echo "当前 MONITOR_WEBHOOK_URL: ${current}"
   fi
-  read -r -p "请输入新的 MONITOR_WEBHOOK_URL (或直接回车跳过): " webhook
+  printf "请输入新的 MONITOR_WEBHOOK_URL (或直接回车跳过): "
+  read -r webhook || webhook=""
   if [[ -z "$webhook" ]]; then
     echo "[monitor-bootstrap] 保持现有 MONITOR_WEBHOOK_URL"
     return
