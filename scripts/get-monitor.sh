@@ -50,6 +50,18 @@ detect_arch() {
   esac
 }
 
+read_with_prompt() {
+  local prompt="$1"
+  local input=""
+  if [[ -t 0 ]]; then
+    read -r -p "$prompt" input || input=""
+  else
+    printf "%s" "$prompt" > /dev/tty
+    IFS= read -r input < /dev/tty || input=""
+  fi
+  printf '%s' "$input"
+}
+
 configure_webhook() {
   local env_file="/etc/default/monitor"
   if [[ ! -f "$env_file" ]]; then
@@ -64,8 +76,7 @@ configure_webhook() {
   if [[ -n "$current" ]]; then
     echo "当前 MONITOR_WEBHOOK_URL: ${current}"
   fi
-  printf "请输入新的 MONITOR_WEBHOOK_URL (或直接回车跳过): "
-  read -r webhook || webhook=""
+  webhook=$(read_with_prompt "请输入新的 MONITOR_WEBHOOK_URL (或直接回车跳过): ")
   if [[ -z "$webhook" ]]; then
     echo "[monitor-bootstrap] 保持现有 MONITOR_WEBHOOK_URL"
     return
@@ -81,7 +92,8 @@ configure_webhook() {
 
 maybe_start_service() {
   echo ""
-  read -r -p "是否现在启动/重启 monitor.service? [Y/n]: " answer
+  local answer
+  answer=$(read_with_prompt "是否现在启动/重启 monitor.service? [Y/n]: ")
   answer=${answer:-Y}
   if [[ "$answer" =~ ^[Yy]$ ]]; then
     systemctl enable monitor.service >/dev/null 2>&1 || true
